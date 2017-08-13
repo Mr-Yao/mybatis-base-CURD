@@ -1,5 +1,15 @@
-# 对Mybatis通用 CRUD 封装
-将基础的 增、删、改、查进行了封装。省掉大部分简单Mapper的编写，节省开发时间。
+# Mybatis基础 CRUD 封装
+将基础的 增、删、改、查进行了封装。省掉大部分简单Mapper的编写，节省开发时间。采用标准JPA规范，在此处配置好的POJO，
+放到其他任何实现了JPA的框架（如：Hibernate）都能使用。当然目前只使用到了JPA的一小部分注解，可以把这些封装看作一个超超超低配版的Hibernate。
+目前支持的注解：
+```$java
+@Table              数据库表名映射。
+@Id                 主键映射。
+@Column             字段名映射。其中name、updatable、insertable属性均支持
+@Transient          表示不需要跟数据库作映射。在我的封装中只有加了@Column才会同数据库映射，但在Hibernate中必须得使用。
+@MappedSuperclass   实体之间继承关系
+```
+都是一些常用配置。做这个东西的初衷仅仅是为了简化单表的操作，什么@ManyToMany、@JoinTable直接忽略。这些子查询、关联查询、以及比较复杂的查询还是老老实实的用Mapper写比较好。
 ## 配置
 很简单的几步配置。主要是在`SqlSessionFactoryBean`中加入结果集处理插件和分页插件，以及`MapperScannerConfigurer`中增加`BaseMappper`
 ```$xml
@@ -271,3 +281,13 @@ public class AreaServiceImpl implements AreaService{
 
 }
 ```
+## 不足之处
+1、insertList生成的SQL（insert into table(c1,c2) values(1,2),(3,4)）无法通用。  
+2、分页插件仅支持Mysql和Oracle  
+3、会在代码中植入SQL语句，需要对组员进行规范。复杂SQL使用Mapper文件
+## 数据库兼容性
+目前我这边是使用mysql数据库，所以都是根据mysql进行的开发。但是所有封装中除insertList外，其他都是用的标准SQL。所以理论上可以不用考虑数据库兼容性的问题，在批量插入时注意下就好。
+# 结语
+源码已经放到了GitHub，没啥难度，需要使用拷下来直接使用即可，就不写Demo了 。东西虽然不大，如果有什么问题、建议欢迎大家留言谈论，可以直接PR哦。
+
+[https://github.com/Mr-Yao/mybatis-base-CURD](https://github.com/Mr-Yao/mybatis-base-CURD)
