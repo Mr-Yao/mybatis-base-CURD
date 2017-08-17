@@ -1,25 +1,24 @@
 package me.ly.tools.mybatis.mybatis;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Type;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.*;
-
-import javax.persistence.Column;
-import javax.persistence.Id;
-
+import me.ly.tools.mybatis.utils.ReflectUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.ibatis.executor.resultset.ResultSetHandler;
 import org.apache.ibatis.mapping.MappedStatement;
 import org.apache.ibatis.plugin.*;
 import org.apache.ibatis.scripting.defaults.DefaultParameterHandler;
 
-import me.ly.tools.mybatis.utils.ReflectUtil;
+import javax.persistence.Column;
+import javax.persistence.Id;
+import java.lang.reflect.Field;
+import java.lang.reflect.Type;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.*;
 
 /**
  * Mybatis 查询结果集处理拦截器
- * 
+ *
  * @author Created by LiYao on 2017-03-03 22:38.
  */
 @Intercepts({ @Signature(method = "handleResultSets", type = ResultSetHandler.class, args = { Statement.class }) })
@@ -28,8 +27,9 @@ public class MybatisResultInterceptor implements Interceptor {
 
 	// private static Logger logger =
 	// LoggerFactory.getLogger(MybatisResultInterceptor.class);
+
 	// 需要拦截处理的方法
-	private String[] interceptMethods = { "baseSelectAll", "baseSelectByPage", "baseSelectById" };
+	private volatile String[] interceptMethods = null;
 
 	@Override
 	public Object intercept(Invocation invocation) throws Throwable {
@@ -68,8 +68,7 @@ public class MybatisResultInterceptor implements Interceptor {
 				if (!f.isAnnotationPresent(Id.class) && !f.isAnnotationPresent(Column.class)) {
 					continue;
 				}
-				Type clazz = f.getGenericType();
-				Object o;
+				Type resultType = f.getGenericType();
 				String fieldName = f.getName();
 				if (null != f.getAnnotation(Column.class)) {
 					Column col = f.getAnnotation(Column.class);
@@ -78,22 +77,82 @@ public class MybatisResultInterceptor implements Interceptor {
 						fieldName = cn;
 					}
 				}
-				if (clazz.equals(int.class) || clazz.equals(Integer.class)) {
-					o = rs.getInt(fieldName);
-				} else if (clazz.equals(Date.class)) {
-					o = rs.getTimestamp(fieldName);
-				} else if (clazz.equals(boolean.class) || clazz.equals(Boolean.class)) {
-					o = rs.getBoolean(fieldName);
-				} else if (clazz.equals(byte.class) || clazz.equals(Byte.class)) {
-					o = rs.getByte(fieldName);
-				} else {
-					o = rs.getObject(fieldName);
-				}
+				Object o = getResultValue(resultType, fieldName, rs);
 				ReflectUtil.setFieldValue(obj, f.getName(), o);
 			}
 			list.add(obj);
 		}
 		return list;
+	}
+
+	// private Class<?>[] objectTypes = { Byte.class, Short.class,
+	// Integer.class, Long.class, Double.class, Float.class, Boolean.class,
+	// Date.class, BigDecimal.class, String.class };
+
+	private Class<?>[] basicTypes = { byte.class, short.class, int.class, long.class, double.class, float.class, boolean.class };
+
+	private Object getResultValue(Type resultType, String fieldName, ResultSet rs) throws Exception {
+		int index = rs.findColumn(fieldName);
+		Object obj = rs.getObject(index);
+		// 如果返回值要求不是基本数据类型 并且 在数据库对应值为null。直接返回null
+		if (!arrayContains(basicTypes, resultType) && obj == null) {
+			return null;
+		}
+
+		if (resultType.equals(String.class)) {
+			return rs.getString(index);
+		} else if (resultType.equals(byte.class) || resultType.equals(Byte.class)) {
+			// 返回值要求是基本数据类型 并且 在数据库对应值为null。则返回默认值
+			if (obj == null) {
+				return 0;
+			}
+			return rs.getByte(index);
+		} else if (resultType.equals(short.class) || resultType.equals(Short.class)) {
+			if (obj == null) {
+				return 0;
+			}
+			return rs.getShort(index);
+		} else if (resultType.equals(int.class) || resultType.equals(Integer.class)) {
+			if (obj == null) {
+				return 0;
+			}
+			return rs.getInt(index);
+		} else if (resultType.equals(long.class) || resultType.equals(Long.class)) {
+			if (obj == null) {
+				return 0L;
+			}
+			return rs.getLong(index);
+		} else if (resultType.equals(double.class) || resultType.equals(Double.class)) {
+			if (obj == null) {
+				return 0.0D;
+			}
+			return rs.getDouble(index);
+		} else if (resultType.equals(float.class) || resultType.equals(Float.class)) {
+			if (obj == null) {
+				return 0.0F;
+			}
+			return rs.getFloat(index);
+		} else if (resultType.equals(boolean.class) || resultType.equals(Boolean.class)) {
+			return obj != null && rs.getBoolean(index);
+		} else if (resultType.equals(Date.class)) {
+			return rs.getTimestamp(index);
+		} else if (resultType.equals(BigDecimal.class)) {
+			return rs.getBigDecimal(index);
+		} else {
+			return obj;
+		}
+	}
+
+	private boolean arrayContains(Object[] arrays, Object obj) {
+		if (arrays == null || arrays.length <= 0) {
+			return false;
+		}
+		for (Object o : arrays) {
+			if (o.equals(obj)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Override
@@ -108,7 +167,9 @@ public class MybatisResultInterceptor implements Interceptor {
 
 	@SuppressWarnings("unused")
 	public void setInterceptMethods(String... interceptMethods) {
-		this.interceptMethods = interceptMethods;
+		if (this.interceptMethods == null) {
+			this.interceptMethods = interceptMethods;
+		}
 	}
 
 	private boolean isIntercept(String method) {
