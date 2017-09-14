@@ -32,7 +32,7 @@ import java.util.*;
 @Intercepts({ @Signature(method = "handleResultSets", type = ResultSetHandler.class, args = { Statement.class }) })
 public class MybatisResultInterceptor implements Interceptor {
 
-    private boolean defaultAllMethod = true;
+    private boolean interceptAllMethod = true;
 
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
@@ -246,6 +246,7 @@ public class MybatisResultInterceptor implements Interceptor {
     }
 
     private boolean isIntercept(String fullMethodName) throws Exception {
+        // 方法名为空，不拦截
         if (StringUtils.isBlank(fullMethodName)) {
             return false;
         }
@@ -260,16 +261,18 @@ public class MybatisResultInterceptor implements Interceptor {
         if (methodAnnotation != null) {
             return methodAnnotation.intercept();
         }
-        if (defaultAllMethod) {
-            return false;
-        }
         ResultIntercept classAnnotation = clazz.getAnnotation(ResultIntercept.class);
+        if (interceptAllMethod) {
+            // 设置了拦截所有方法的时候要判断接口类是不是配置不拦截。
+            return !(classAnnotation != null && !classAnnotation.intercept());
+        }
+        // 未设置拦截所有方法，则判断接口类是不是配置了拦截
         return !(classAnnotation == null || !classAnnotation.intercept());
     }
 
     @SuppressWarnings("unused")
-    public void setDefaultAllMethod(boolean defaultAllMethod) {
-        this.defaultAllMethod = defaultAllMethod;
+    public void setInterceptAllMethod(boolean interceptAllMethod) {
+        this.interceptAllMethod = interceptAllMethod;
     }
 
     /**
