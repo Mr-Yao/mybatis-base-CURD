@@ -101,8 +101,9 @@ public String selectById(Map<?, ?> map) {
 注意事项：
 1. 如某方法已经设置了ResultMap，则该方法会被拦截但是拦截后会直接交给MyBatis，拦截器本身不会再做处理。
 2. 仅支持单表单实体，对于一些复杂的对象请使用`ResultMap`。
-3. 返回对象必须设置`@Entity`注解，字段必须设置`@Column`注解。
-4. 该拦截器中提供了`interceptAllMethod`字段，在声明插件时通过Spring注入（true/false），用于设置是否对所有方法拦截。默认true。  
+3. SQL查询字段需要和@Column设置的名字对应，使用别名的时候注意一下。
+4. 返回对象必须设置`@Entity`注解，字段必须设置`@Column`注解。
+5. 该拦截器中提供了`interceptAllMethod`字段，在声明插件时通过Spring注入（true/false），用于设置是否对所有方法拦截。默认true。  
 同时提供了`@ResultIntercept`注解，来更加灵活的配置对方法的连接。该注解可以在方法或者接口类上使用。
     1. 如果在方法上配置了@ResultIntercept，则该方法一定会或不会被拦截。优先级最高
     2. 如果在接口类上配置了@ResultIntercept(intercept = false)，则该接口类的方法不会被拦截。优先级第二
