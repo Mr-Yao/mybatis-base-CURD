@@ -9,15 +9,15 @@
 @Transient          表示不需要跟数据库作映射。在我的封装中只有加了@Column才会同数据库映射，但在Hibernate中必须得使用。
 @MappedSuperclass   实体之间继承关系
 ```
-都是一些常用配置。做这个东西的初衷仅仅是为了简化单表的操作，什么@ManyToMany、@JoinTable直接忽略。这些子查询、关联查询、以及比较复杂的查询还是老老实实的用Mapper写比较好。
+都是一些常用配置。做这个东西的初衷仅仅是为了简化单表的操作，什么@ManyToMany、@JoinTable直接忽略。子查询、关联查询、以及比较复杂的查询请写Mapper比较好。
 ## 配置
 很简单的几步配置。主要是在`SqlSessionFactoryBean`中加入结果集处理插件和分页插件，以及`MapperScannerConfigurer`中增加`BaseMappper`
 ```$xml
 省略部分代码......
 
 <!--配置插件-->
-<bean id="myBatisResultIntercept" class="com.bbd.wtyh.core.mybatis.MybatisResultInterceptor"/>
-<bean id="mybatisPaginationInterceptor" class="com.bbd.wtyh.core.mybatis.MybatisPaginationInterceptor"/>
+<bean id="myBatisResultIntercept" class="me.ly.tools.mybatis.mybatis.MybatisResultInterceptor"/>
+<bean id="mybatisPaginationInterceptor" class="me.ly.tools.mybatis.mybatis.MybatisPaginationInterceptor"/>
 
 <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
     <property name="dataSource" ref="dataSource"/>
@@ -30,7 +30,7 @@
 </bean>
 <!-- MapperScanner 中加上 BaseMapper -->
 <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
-    <property name="basePackage" value="......,com.bbd.wtyh.core.dao"/>
+    <property name="basePackage" value="......,me.ly.tools.mybatis.dao"/>
     <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"/>
 </bean>
 
@@ -92,47 +92,48 @@ public String selectById(Map<?, ?> map) {
 省略部分代码......
 
 @SelectProvider(type = CRUDTemplate.class, method = "selectById")
-<T> List<T> baseSelectById(@Param("clazz") Class<T> clazz, @Param("id") Object id);
+<T> List<T> selectById(@Param("clazz") Class<T> clazz, @Param("id") Object id);
 
 省略部分代码......
 ```
 ### 4、MybatisResultInterceptor
-用于处理查询结果集的拦截器。通过`JPA`注解将POJO字段同数据库中字段对应，再交由该拦截器处理。可以省掉很多ResultMap的编写。  
-当然这玩意目前仅支持单表单实体，功能还不是很完善，待后续慢慢完善。
+用于处理查询结果集的拦截器。通过`JPA`注解将POJO字段同数据库中字段对应，再交由该拦截器处理。可以省掉很多ResultMap的编写。
+注意事项：
+1. 如某方法已经设置了ResultMap，则该方法会被拦截但是拦截后会直接交给MyBatis，拦截器本身不会再做处理。
+2. 仅支持单表单实体，对于一些复杂的对象请使用`ResultMap`。
+3. 返回对象必须设置`@Entity`注解，字段必须设置`@Column`注解。
+4. 该拦截器中提供了`interceptAllMethod`字段，在声明插件时通过Spring注入（true/false），用于设置是否对所有方法拦截。默认true。  
+同时提供了`@ResultIntercept`注解，来更加灵活的配置对方法的连接。该注解可以在方法或者接口类上使用。
+    1. 如果在方法上配置了@ResultIntercept，则该方法一定会或不会被拦截。优先级最高
+    2. 如果在接口类上配置了@ResultIntercept(intercept = false)，则该接口类的方法不会被拦截。优先级第二
+    3. 如果设置了interceptAllMethod = true，则所有方法都会被拦截。优先级第三
+    4. 如果设置了interceptAllMethod = false，则判断接口类上的@ResultIntercept。优先级最低
+    
 ```
 ......
-List<Object> list = new ArrayList<>();
-while (rs.next()) {
-    Object obj = pojoClazz.newInstance();
-    for (Field f : fieldList) {
-        f.setAccessible(true);
-        if (!f.isAnnotationPresent(Id.class) && !f.isAnnotationPresent(Column.class)) {
-            continue;
-        }
-        Type clazz = f.getGenericType();
-        Object o;
-        String fieldName = f.getName();
-        if (null != f.getAnnotation(Column.class)) {
-            Column col = f.getAnnotation(Column.class);
-            String cn = col.name();
-            if (cn.trim().length() > 0) {
-                fieldName = cn;
-            }
-        }
-        if (clazz.equals(int.class) || clazz.equals(Integer.class)) {
-            o = rs.getInt(fieldName);
-        } else if (clazz.equals(Date.class)) {
-            o = rs.getTimestamp(fieldName);
-        } else if (clazz.equals(boolean.class) || clazz.equals(Boolean.class)) {
-            o = rs.getBoolean(fieldName);
-        } else if (clazz.equals(byte.class) || clazz.equals(Byte.class)) {
-            o = rs.getByte(fieldName);
-        } else {
-            o = rs.getObject(fieldName);
-        }
-        ReflectUtil.setFieldValue(obj, f.getName(), o);
+private boolean isIntercept(String fullMethodName) throws Exception {
+    // 方法名为空，不拦截
+    if (StringUtils.isBlank(fullMethodName)) {
+        return false;
     }
-    list.add(obj);
+
+    int lastPointIndex = fullMethodName.lastIndexOf(".");
+    String fullClazz = fullMethodName.substring(0, lastPointIndex);
+    String methodName = fullMethodName.substring(lastPointIndex + 1, fullMethodName.length());
+    Class<?> clazz = Class.forName(fullClazz);
+
+    Method method = ReflectUtil.getMethod(clazz, methodName);
+    ResultIntercept methodAnnotation = method.getAnnotation(ResultIntercept.class);
+    if (methodAnnotation != null) {
+        return methodAnnotation.intercept();
+    }
+    ResultIntercept classAnnotation = clazz.getAnnotation(ResultIntercept.class);
+    if (interceptAllMethod) {
+        // 设置了拦截所有方法的时候要判断接口类是不是配置不拦截。
+        return !(classAnnotation != null && !classAnnotation.intercept());
+    }
+    //未设置拦截所有方法，则判断接口类是不是配置了拦截
+    return !(classAnnotation == null || !classAnnotation.intercept());
 }
 ......
 ```
@@ -185,7 +186,7 @@ private String mysqlLimitPageSql(Pagination page, String sql) {
 
 
 ```$java
-
+@Entity
 @Table(name = "area")
 public class AreaDO extends BaseDO {
 
@@ -253,7 +254,7 @@ public class AreaServiceImpl extends BaseServiceImpl implements AreaService{
 }
 ```
 ### 3、注入BaseService
-因为可能被其它类继承，所提这里注入时要限定名字。
+因为可能被其它类继承，所以这里注入时要限定名字。
 ```$java
 @Service
 public class AreaServiceImpl implements AreaService{
@@ -286,7 +287,7 @@ public class AreaServiceImpl implements AreaService{
 2、分页插件仅支持Mysql和Oracle  
 3、会在代码中植入SQL语句，需要对组员进行规范。复杂SQL使用Mapper文件
 ## 数据库兼容性
-目前我这边是使用mysql数据库，所以都是根据mysql进行的开发。但是所有封装中除insertList外，其他都是用的标准SQL。所以理论上可以不用考虑数据库兼容性的问题，在批量插入时注意下就好。
+使用mysql数据库进行的开发，所以都是根据mysql进行的开发。但是所有封装中除insertList外，其他都是用的标准SQL。所以理论上可以不用考虑数据库兼容性的问题，在批量插入时注意下就好。
 # 结语
 源码已经放到了GitHub，没啥难度，需要使用拷下来直接使用即可，就不写Demo了 。东西虽然不大，如果有什么问题、建议欢迎大家留言谈论，可以直接PR哦。
 
