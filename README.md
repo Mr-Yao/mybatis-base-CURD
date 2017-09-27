@@ -1,4 +1,4 @@
-# Mybatis基础 CRUD 封装
+# MyBatis基础 CRUD 封装
 将基础的 增、删、改、查进行了封装。省掉大部分简单Mapper的编写，节省开发时间。采用标准JPA规范，在此处配置好的POJO，
 放到其他任何实现了JPA的框架（如：Hibernate）都能使用。当然目前只使用到了JPA的一小部分注解，可以把这些封装看作一个超超超低配版的Hibernate。
 目前支持的注解：
@@ -35,6 +35,116 @@
 </bean>
 
 省略部分代码......
+```
+## 使用
+### 1、POJO添加注解
+这里以区域表作为例子。下面贴出area表及其对应实体类。
+
+|area_id|name|parent_id|province_id|city_id|level|create_by|create_date|
+|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
+|23|四川|-1|23| |1|system|2016-08-24|
+|286|成都|23|23|286|2|system|2016-08-24|
+|287|自贡|23|23|287|2|system|2016-08-24|
+|288|攀枝花|23|23|288|2|system|2016-08-24|
+|289|泸州|23|23|289|2|system|2016-08-24|
+
+
+```$java
+@Entity
+@Table(name = "area")
+public class AreaDO extends BaseDO {
+
+    省略部分代码......
+    
+    @Id
+    @Column(name = "area_id")
+    private Integer areaId;
+
+    @Column
+    private String name;
+
+    @Column(name = "parent_id")
+    private Integer parentId;
+
+    @Column(name = "city_id")
+    private Integer cityId;
+
+    @Column(name = "province_id")
+    private Integer provinceId;
+    
+    省略getter/setter部分代码......
+}
+```
+如果有继承关系，则需要在父类加上`@MappedSuperclass`。如上代码段中AreaDO extends BaseDO 
+```$java
+@MappedSuperclass
+public class BaseDO implements Serializable {
+    
+    /** 创建人 */
+    @Column(name = "create_by", updatable = false)
+    private String createBy;
+
+    /** 创建时间 */
+    @Column(name = "create_date", updatable = false)
+    private Date createDate;
+        
+    省略部分代码......
+}
+
+```
+### 2、实现类继承BaseServiceImpl类
+```$java
+@Service
+public class AreaServiceImpl extends BaseServiceImpl implements AreaService{
+    省略部分代码......
+    
+    public void method(){
+        AreaDO areaDo1 = this.selectOne(AreaDO.class,"name = ?","四川");
+        System.out.println(JSON.toJSONString(areaDO1));
+        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
+    
+        AreaDO areaDO2 = this.selectById(AreaDO.class, 23);
+        System.out.println(JSON.toJSONString(areaDO2));
+        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
+    
+        List<AreaDO> areaList = this.selectAll(AreaDO.class, "parent_id = ? LIMIT 2", 23);
+        System.out.println(JSON.toJSONString(areaList));
+        //输出：
+        //  [
+        //    {"areaId":286,"cityId":286,"createBy":"system","createDate":1471968000000,"name":"成都","parentId":23,"provinceId":23},
+        //    {"areaId":287,"cityId":287,"createBy":"system","createDate":1471968000000,"name":"自贡","parentId":23,"provinceId":23}
+        //  ]
+    }    
+}
+```
+### 3、注入BaseService
+因为可能被其它类继承，所以这里注入时要限定名字。
+```$java
+@Service
+public class AreaServiceImpl implements AreaService{
+    @Autowired
+    @Qualifier(value = "baseServiceImpl")
+    private BaseService baseService;
+
+    public void method(){
+        AreaDO areaDo1 = this.baseService.selectOne(AreaDO.class,"name = ?","四川");
+        System.out.println(JSON.toJSONString(areaDO1));
+        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
+    
+        AreaDO areaDO2 = this.baseService.selectById(AreaDO.class, 23);
+        System.out.println(JSON.toJSONString(areaDO2));
+        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
+    
+        List<AreaDO> areaList = this.baseService.selectAll(AreaDO.class, "parent_id = ? LIMIT 2", 23);
+        System.out.println(JSON.toJSONString(areaList));
+        //输出：
+        //  [
+        //    {"areaId":286,"cityId":286,"createBy":"system","createDate":1471968000000,"name":"成都","parentId":23,"provinceId":23},
+        //    {"areaId":287,"cityId":287,"createBy":"system","createDate":1471968000000,"name":"自贡","parentId":23,"provinceId":23}
+        //  ]
+    }
+
+}
 ```
 ## 代码片段
 ### 1、BaseService
@@ -173,116 +283,6 @@ private String mysqlLimitPageSql(Pagination page, String sql) {
 
 省略部分代码......
 ```
-## 使用
-### 1、POJO添加注解
-这里以区域表作为例子。下面贴出area表及其对应实体类。
-
-|area_id|name|parent_id|province_id|city_id|level|create_by|create_date|
-|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
-|23|四川|-1|23| |1|system|2016-08-24|
-|286|成都|23|23|286|2|system|2016-08-24|
-|287|自贡|23|23|287|2|system|2016-08-24|
-|288|攀枝花|23|23|288|2|system|2016-08-24|
-|289|泸州|23|23|289|2|system|2016-08-24|
-
-
-```$java
-@Entity
-@Table(name = "area")
-public class AreaDO extends BaseDO {
-
-    省略部分代码......
-    
-    @Id
-    @Column(name = "area_id")
-    private Integer areaId;
-
-    @Column
-    private String name;
-
-    @Column(name = "parent_id")
-    private Integer parentId;
-
-    @Column(name = "city_id")
-    private Integer cityId;
-
-    @Column(name = "province_id")
-    private Integer provinceId;
-    
-    省略getter/setter部分代码......
-}
-```
-如果有继承关系，则需要在父类加上`@MappedSuperclass`。如上代码段中AreaDO extends BaseDO 
-```$java
-@MappedSuperclass
-public class BaseDO implements Serializable {
-    
-    /** 创建人 */
-    @Column(name = "create_by", updatable = false)
-    private String createBy;
-
-    /** 创建时间 */
-    @Column(name = "create_date", updatable = false)
-    private Date createDate;
-        
-    省略部分代码......
-}
-
-```
-### 2、实现类继承BaseServiceImpl类
-```$java
-@Service
-public class AreaServiceImpl extends BaseServiceImpl implements AreaService{
-    省略部分代码......
-    
-    public void method(){
-        AreaDO areaDo1 = this.selectOne(AreaDO.class,"name = ?","四川");
-        System.out.println(JSON.toJSONString(areaDO1));
-        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
-    
-        AreaDO areaDO2 = this.selectById(AreaDO.class, 23);
-        System.out.println(JSON.toJSONString(areaDO2));
-        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
-    
-        List<AreaDO> areaList = this.selectAll(AreaDO.class, "parent_id = ? LIMIT 2", 23);
-        System.out.println(JSON.toJSONString(areaList));
-        //输出：
-        //  [
-        //    {"areaId":286,"cityId":286,"createBy":"system","createDate":1471968000000,"name":"成都","parentId":23,"provinceId":23},
-        //    {"areaId":287,"cityId":287,"createBy":"system","createDate":1471968000000,"name":"自贡","parentId":23,"provinceId":23}
-        //  ]
-    }    
-}
-```
-### 3、注入BaseService
-因为可能被其它类继承，所以这里注入时要限定名字。
-```$java
-@Service
-public class AreaServiceImpl implements AreaService{
-    @Autowired
-    @Qualifier(value = "baseServiceImpl")
-    private BaseService baseService;
-
-    public void method(){
-        AreaDO areaDo1 = this.baseService.selectOne(AreaDO.class,"name = ?","四川");
-        System.out.println(JSON.toJSONString(areaDO1));
-        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
-    
-        AreaDO areaDO2 = this.baseService.selectById(AreaDO.class, 23);
-        System.out.println(JSON.toJSONString(areaDO2));
-        //输出：{"areaId":23,"cityId":0,"createBy":"system","createDate":1471968000000,"name":"四川","parentId":-1,"provinceId":23}
-    
-        List<AreaDO> areaList = this.baseService.selectAll(AreaDO.class, "parent_id = ? LIMIT 2", 23);
-        System.out.println(JSON.toJSONString(areaList));
-        //输出：
-        //  [
-        //    {"areaId":286,"cityId":286,"createBy":"system","createDate":1471968000000,"name":"成都","parentId":23,"provinceId":23},
-        //    {"areaId":287,"cityId":287,"createBy":"system","createDate":1471968000000,"name":"自贡","parentId":23,"provinceId":23}
-        //  ]
-    }
-
-}
-```
 ## 不足之处
 1、insertList生成的SQL（insert into table(c1,c2) values(1,2),(3,4)）无法通用。  
 2、分页插件仅支持Mysql和Oracle  
@@ -290,6 +290,6 @@ public class AreaServiceImpl implements AreaService{
 ## 数据库兼容性
 使用mysql数据库进行的开发，所以都是根据mysql进行的开发。但是所有封装中除insertList外，其他都是用的标准SQL。所以理论上可以不用考虑数据库兼容性的问题，在批量插入时注意下就好。
 # 结语
-源码已经放到了GitHub，没啥难度，需要使用拷下来直接使用即可，就不写Demo了 。东西虽然不大，如果有什么问题、建议欢迎大家留言谈论，可以直接PR哦。
+源码已经放到了GitHub，没啥难度，需要使用拷下来直接使用即可，就不写Demo了 。东西虽然不大，如果有什么问题、建议欢迎大家留言谈论，可以直接PR。
 
 [https://github.com/Mr-Yao/mybatis-base-CURD](https://github.com/Mr-Yao/mybatis-base-CURD)
